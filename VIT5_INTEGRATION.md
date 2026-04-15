@@ -139,6 +139,7 @@ student.pos_embed_type=rope
 
 - 三个新字段默认 false，**未启用时行为与修改前完全一致**，不会影响已在跑的任务或已有 checkpoint 的加载。
 - FSDP、meta-device、`init_weights()`、iBOT mask、`get_intermediate_layers`、`compile`、`fp8` 路径均未触及。
+- FSDP 非 DCP checkpoint 恢复路径的 `keys_not_sharded` 白名单（`dinov3/train/ssl_meta_arch.py` 三处 + `dinov3/eval/text/build_dinotxt.py` 一处）已同步加入 `backbone.register_rope_embed.periods`。该 buffer 与 `rope_embed.periods` 性质相同（`persistent=True`，需在 rank 间 replicate 而非 shard），否则启用 `register_rope_enabled=True` 时从 `.pth` checkpoint 恢复会静默出错。
 - 已通过 `python -m py_compile` 语法检查；运行时验证建议在训练机上跑 1–2 iter。
 
 ## 为什么没有直接把 `models_v2.py` 套进来

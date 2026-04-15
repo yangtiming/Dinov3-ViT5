@@ -317,7 +317,7 @@ class SSLMetaArch(nn.Module):
                         "dino_loss.center",
                         "ibot_patch_loss.center",
                     ],
-                    keys_not_sharded=["backbone.rope_embed.periods", "qkv.bias_mask"],
+                    keys_not_sharded=["backbone.rope_embed.periods", "backbone.register_rope_embed.periods", "qkv.bias_mask"],
                     process_group=distributed.get_default_process_group(),
                 )
                 self.gram_teacher_initialized = True
@@ -331,7 +331,7 @@ class SSLMetaArch(nn.Module):
                 self.student,
                 self.cfg.student.resume_from_teacher_chkpt,
                 skip_load_keys=["dino_loss.center", "ibot_patch_loss.center"],
-                keys_not_sharded=["backbone.rope_embed.periods", "qkv.bias_mask"],
+                keys_not_sharded=["backbone.rope_embed.periods", "backbone.register_rope_embed.periods", "qkv.bias_mask"],
                 process_group=distributed.get_process_subgroup(),
             )
             self.model_ema.load_state_dict(self.student.state_dict())
@@ -342,7 +342,7 @@ class SSLMetaArch(nn.Module):
                     self.teacher,
                     self.cfg.distillation.checkpoint_path,
                     skip_load_keys=["dino_loss.center", "ibot_patch_loss.center"],
-                    keys_not_sharded=["backbone.rope_embed.periods", "qkv.bias_mask"],
+                    keys_not_sharded=["backbone.rope_embed.periods", "backbone.register_rope_embed.periods", "qkv.bias_mask"],
                     process_group=distributed.get_default_process_group(),
                 )
             else:

@@ -59,7 +59,7 @@ def load_backbone_checkpoint(
                 torch.distributed.tensor.distribute_tensor(
                     v, world_mesh, src_data_rank=None
                 )
-                if not k.startswith("rope_embed.periods") and "qkv.bias_mask" not in k
+                if "rope_embed.periods" not in k and "qkv.bias_mask" not in k
                 else v
             )
             for k, v in state_dict.items()
