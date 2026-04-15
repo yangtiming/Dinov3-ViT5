@@ -8,6 +8,7 @@ from typing import List, Tuple
 
 import torch
 import torch.nn.functional as F
+from dinov3.layers.rms_norm import RMSNorm
 from dinov3.utils import cat_keep_shapes, uncat_with_shapes
 from torch import Tensor, nn
 
@@ -50,6 +51,7 @@ class SelfAttention(nn.Module):
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
         mask_k_bias: bool = False,
+        qk_norm: bool = False,
         device=None,
     ) -> None:
         super().__init__()
@@ -62,6 +64,11 @@ class SelfAttention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim, bias=proj_bias, device=device)
         self.proj_drop = nn.Dropout(proj_drop)
+
+        self.qk_norm = qk_norm
+        if qk_norm:
+            self.q_norm = RMSNorm(head_dim)
+            self.k_norm = RMSNorm(head_dim)
 
     def apply_rope(self, q: Tensor, k: Tensor, rope: Tensor | Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tensor]:
         # All operations will use the dtype of rope, the output is cast back to the dtype of q and k
@@ -111,6 +118,10 @@ class SelfAttention(nn.Module):
         qkv = qkv.reshape(B, N, 3, self.num_heads, C // self.num_heads)
         q, k, v = torch.unbind(qkv, 2)
         q, k, v = [t.transpose(1, 2) for t in [q, k, v]]
+        if self.qk_norm:
+            qk_dtype = q.dtype
+            q = self.q_norm(q).to(qk_dtype)
+            k = self.k_norm(k).to(qk_dtype)
         if rope is not None:
             q, k = self.apply_rope(q, k, rope)
         x = torch.nn.functional.scaled_dot_product_attention(q, k, v)

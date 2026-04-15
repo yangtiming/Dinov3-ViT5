@@ -84,6 +84,9 @@ class DinoVisionTransformer(nn.Module):
         proj_bias: bool = True,
         n_storage_tokens: int = 0,
         mask_k_bias: bool = False,
+        qk_norm: bool = False,
+        register_rope_enabled: bool = False,
+        register_rope_theta: float = 100.0,
         untie_cls_and_patch_norms: bool = False,
         untie_global_and_local_cls_norm: bool = False,
         device: Any | None = None,
@@ -134,6 +137,30 @@ class DinoVisionTransformer(nn.Module):
             dtype=dtype_dict[pos_embed_rope_dtype],
             device=device,
         )
+        # Optional per-register RoPE (ViT-5 style): separate theta, sqrt(n_storage) grid
+        self.register_rope_enabled = register_rope_enabled and n_storage_tokens > 0
+        if self.register_rope_enabled:
+            reg_side = int(round(n_storage_tokens**0.5))
+            assert reg_side * reg_side == n_storage_tokens, (
+                f"register_rope_enabled requires n_storage_tokens to be a square number, got {n_storage_tokens}"
+            )
+            self.register_rope_side = reg_side
+            self.register_rope_embed = RopePositionEmbedding(
+                embed_dim=embed_dim,
+                num_heads=num_heads,
+                base=register_rope_theta,
+                min_period=None,
+                max_period=None,
+                normalize_coords=pos_embed_rope_normalize_coords,
+                shift_coords=None,
+                jitter_coords=None,
+                rescale_coords=None,
+                dtype=dtype_dict[pos_embed_rope_dtype],
+                device=device,
+            )
+        else:
+            self.register_rope_embed = None
+
         logger.info(f"using {ffn_layer} layer as FFN")
         ffn_layer_cls = ffn_layer_dict[ffn_layer]
         ffn_ratio_sequence = [ffn_ratio] * depth
@@ -151,6 +178,7 @@ class DinoVisionTransformer(nn.Module):
                 ffn_layer=ffn_layer_cls,
                 init_values=layerscale_init,
                 mask_k_bias=mask_k_bias,
+                qk_norm=qk_norm,
                 device=device,
             )
             for i in range(depth)
@@ -179,8 +207,23 @@ class DinoVisionTransformer(nn.Module):
         self.head = nn.Identity()
         self.mask_token = nn.Parameter(torch.empty(1, embed_dim, device=device))
 
+    def _build_rope(self, *, H: int, W: int) -> Tuple[Tensor, Tensor]:
+        # Patch RoPE covers the trailing H*W tokens. When register_rope is enabled,
+        # we prepend a RoPE block for the storage tokens so apply_rope (which uses
+        # prefix = N - sin.shape[-2]) also rotates registers. CLS stays unrotated.
+        sin_p, cos_p = self.rope_embed(H=H, W=W)
+        if self.register_rope_embed is None:
+            return sin_p, cos_p
+        r = self.register_rope_side
+        sin_r, cos_r = self.register_rope_embed(H=r, W=r)
+        sin = torch.cat([sin_r, sin_p], dim=-2)
+        cos = torch.cat([cos_r, cos_p], dim=-2)
+        return sin, cos
+
     def init_weights(self):
         self.rope_embed._init_weights()
+        if self.register_rope_embed is not None:
+            self.register_rope_embed._init_weights()
         nn.init.normal_(self.cls_token, std=0.02)
         if self.n_storage_tokens > 0:
             nn.init.normal_(self.storage_tokens, std=0.02)
@@ -228,7 +271,7 @@ class DinoVisionTransformer(nn.Module):
             rope.append(hw_tuple)
         for _, blk in enumerate(self.blocks):
             if self.rope_embed is not None:
-                rope_sincos = [self.rope_embed(H=H, W=W) for H, W in rope]
+                rope_sincos = [self._build_rope(H=H, W=W) for H, W in rope]
             else:
                 rope_sincos = [None for r in rope]
             x = blk(x, rope_sincos)
@@ -273,7 +316,7 @@ class DinoVisionTransformer(nn.Module):
         blocks_to_take = range(total_block_len - n, total_block_len) if isinstance(n, int) else n
         for i, blk in enumerate(self.blocks):
             if self.rope_embed is not None:
-                rope_sincos = self.rope_embed(H=H, W=W)
+                rope_sincos = self._build_rope(H=H, W=W)
             else:
                 rope_sincos = None
             x = blk(x, rope_sincos)

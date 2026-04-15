@@ -15,6 +15,7 @@ from pathlib import Path
 
 import torch
 import torch.distributed
+from omegaconf import OmegaConf
 from torch.distributed._tensor import DTensor
 
 import dinov3.distributed as distributed
@@ -431,8 +432,6 @@ def do_train(cfg, model, resume=False):
     logger.info("Starting training from iteration %d", start_iter)
     metrics_file = os.path.join(cfg.train.output_dir, "training_metrics.json")
     metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file)
-    # Manual garbage collection
-    gc.disable()
     gc.collect()
 
     # Training loop
@@ -595,7 +594,7 @@ def main(argv=None):
     else:
         setup_job(output_dir=args.output_dir, seed=args.seed)
         cfg = setup_config(args, strict_cfg=False)
-        logger.info(cfg)
+        logger.info(OmegaConf.to_yaml(cfg))
         setup_logging(
             output=os.path.join(os.path.abspath(args.output_dir), "nan_logs"),
             name="nan_logger",

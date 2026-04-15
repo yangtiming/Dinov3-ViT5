@@ -96,6 +96,9 @@ student:
   norm_layer: "layernorm"
   n_storage_tokens: 0
   mask_k_bias: false
+  qk_norm: false                    # ViT-5: RMSNorm on q,k (Llama-style)
+  register_rope_enabled: false      # ViT-5: apply 2D RoPE to register tokens (requires square n_storage_tokens)
+  register_rope_theta: 100.0        # ViT-5: separate RoPE base for register tokens
   untie_cls_and_patch_norms: false  # If true, use separate norms for CLS/reg and patch/mask tokens
   untie_global_and_local_cls_norm: false  # If true, use separate norms for local and global crop CLS token during training
   in_chans: 3

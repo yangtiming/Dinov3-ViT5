@@ -16,3 +16,7 @@ dist/
 
 # Ignore vscode directory
 .vscode/
+
+# ImageNet metadata cache
+extra/
+output/
