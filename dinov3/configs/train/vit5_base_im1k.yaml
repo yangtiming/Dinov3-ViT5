@@ -66,7 +66,10 @@ student:
   patch_drop: 0.0
   pretrained_weights: ''
   ffn_layer: swiglu              # ViT-5: SwiGLU
-  ffn_ratio: 2.667               # ViT-5: matches SwiGLU hidden width
+  ffn_ratio: 4.0                 # DINOv3's SwiGLUFFN internally contracts by 2/3 (Llama convention):
+                                 # ffn_ratio=4 -> hidden=3072 -> actual w1/w2 out = int(3072*2/3)=2048,
+                                 # matching models_v2.py::vit5_base_swi (mlp_ratio=2.667 -> 2048 direct).
+                                 # DO NOT use 2.667 here -- that would give only 1368 hidden (67% of ViT-5).
   resume_from_teacher_chkpt: ''
   qkv_bias: false                # ViT-5: bias-free
   proj_bias: false               # ViT-5: bias-free

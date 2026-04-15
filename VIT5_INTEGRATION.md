@@ -57,7 +57,9 @@ register_rope_theta: 100.0        # ViT-5: separate RoPE base for register token
 `models_v2.py` 里 ViT-5 有两种并列变体，分别对应两个预设：
 
 **[dinov3/configs/train/vit5_base_im1k.yaml](dinov3/configs/train/vit5_base_im1k.yaml)** — 对应 `vit5_base_swi`
-`ffn_layer=swiglu / ffn_ratio=2.667 / layerscale=null`，其余 ViT-5 开关全开。
+`ffn_layer=swiglu / ffn_ratio=4.0 / layerscale=null`，其余 ViT-5 开关全开。
+
+> ⚠️ **SwiGLU 的 `ffn_ratio` 取值陷阱**：DINOv3 的 `SwiGLUFFN` 内部会做 `hidden×2/3` 收缩（Llama 惯例）。设 `ffn_ratio=4.0` 对应实际隐层 = int(embed·4·2/3) = `8/3·embed`，与 `models_v2.py::vit5_base_swi` 的 `mlp_ratio=2.667` 等价。**不能直接写 2.667**，否则实际隐层只剩 `16/9·embed`，约为 ViT-5 原配的 67%。
 
 **[dinov3/configs/train/vit5_base_mlp_im1k.yaml](dinov3/configs/train/vit5_base_mlp_im1k.yaml)** — 对应 `vit5_base`
 `ffn_layer=mlp / ffn_ratio=4.0 / layerscale=1e-4`（LayerScale 启用、初值与 `models_v2.py` 对齐），其余 ViT-5 开关（RMSNorm、无 bias、4 registers + RoPE、qk_norm）同样开启。
@@ -103,7 +105,7 @@ register_rope_theta: 100.0        # ViT-5: separate RoPE base for register token
 
 ```
 student.arch=vit_base student.patch_size=16
-student.norm_layer=rmsnorm student.ffn_layer=swiglu student.ffn_ratio=2.667
+student.norm_layer=rmsnorm student.ffn_layer=swiglu student.ffn_ratio=4.0
 student.qkv_bias=false student.ffn_bias=false student.proj_bias=false
 student.layerscale=null student.n_storage_tokens=4
 student.qk_norm=true student.register_rope_enabled=true student.register_rope_theta=10
@@ -115,7 +117,7 @@ student.pos_embed_type=rope
 | ViT-5 特性 | 实现方式 |
 |---|---|
 | RMSNorm | `student.norm_layer=rmsnorm`（DINOv3 原生） |
-| SwiGLU FFN | `student.ffn_layer=swiglu` + `ffn_ratio=2.667`（原生） |
+| SwiGLU FFN | `student.ffn_layer=swiglu` + `ffn_ratio=4.0`（原生） |
 | 2D RoPE on patches | `student.pos_embed_type=rope`（原生） |
 | 无 qkv/ffn/proj bias | `qkv_bias/ffn_bias/proj_bias=false`（原生） |
 | 无 layer_scale | `student.layerscale=null`（原生） |
