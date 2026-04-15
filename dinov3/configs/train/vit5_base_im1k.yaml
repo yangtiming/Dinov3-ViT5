@@ -75,9 +75,13 @@ student:
   n_storage_tokens: 4            # ViT-5: 4 register tokens (must be square for register RoPE)
   qk_norm: true                  # ViT-5: RMSNorm on q,k
   register_rope_enabled: true    # ViT-5: 2D RoPE on register tokens
-  register_rope_theta: 1.0       # ViT-5 "high freq" registers: must be << patch base (100).
-                                 # models_v2.py uses reg_theta=100 vs patch theta=10000 (ratio 1/100);
-                                 # scaled to DINOv3's patch base=100 -> register base = 1.0.
+  register_rope_theta: 10.0      # Empirical initial guess for "high freq" registers vs patch base=100.
+                                 # IMPORTANT: DINOv3 coord system (normalized to [-1,+1]) and models_v2.py
+                                 # (absolute coords) are not directly comparable, so base cannot be
+                                 # derived from models_v2.py's reg_theta=100 by ratio.
+                                 # Must NOT set to 1.0 (periods collapse to a single frequency).
+                                 # Must NOT set to 100.0 (equals patch base -> "same freq" in Table 3).
+                                 # Ablate in {0.1, 10, 30} at your scale before trusting this value.
   mask_k_bias: false
   in_chans: 3
   pos_embed_type: rope
