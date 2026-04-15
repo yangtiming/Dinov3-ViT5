@@ -75,7 +75,9 @@ student:
   n_storage_tokens: 4            # ViT-5: 4 register tokens (must be square for register RoPE)
   qk_norm: true                  # ViT-5: RMSNorm on q,k
   register_rope_enabled: true    # ViT-5: 2D RoPE on register tokens
-  register_rope_theta: 100.0     # ViT-5: independent RoPE base for registers
+  register_rope_theta: 1.0       # ViT-5 "high freq" registers: must be << patch base (100).
+                                 # models_v2.py uses reg_theta=100 vs patch theta=10000 (ratio 1/100);
+                                 # scaled to DINOv3's patch base=100 -> register base = 1.0.
   mask_k_bias: false
   in_chans: 3
   pos_embed_type: rope

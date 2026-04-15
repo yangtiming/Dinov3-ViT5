@@ -75,7 +75,7 @@ student:
   n_storage_tokens: 4            # ViT-5: 4 register tokens
   qk_norm: true                  # ViT-5: RMSNorm on q,k
   register_rope_enabled: true    # ViT-5: 2D RoPE on register tokens
-  register_rope_theta: 100.0
+  register_rope_theta: 1.0       # ViT-5 "high freq" registers (see vit5_base_im1k.yaml for derivation)
   mask_k_bias: false
   in_chans: 3
   pos_embed_type: rope

@@ -62,8 +62,12 @@ register_rope_theta: 100.0        # ViT-5: separate RoPE base for register token
 **[dinov3/configs/train/vit5_base_mlp_im1k.yaml](dinov3/configs/train/vit5_base_mlp_im1k.yaml)** — 对应 `vit5_base`
 `ffn_layer=mlp / ffn_ratio=4.0 / layerscale=1e-4`（LayerScale 启用、初值与 `models_v2.py` 对齐），其余 ViT-5 开关（RMSNorm、无 bias、4 registers + RoPE、qk_norm）同样开启。
 
-共同设置：`arch=vit_base / drop_path_rate=0.1 / qkv_bias=ffn_bias=proj_bias=false / n_storage_tokens=4 / qk_norm=true / register_rope_enabled=true / register_rope_theta=100`。
+共同设置：`arch=vit_base / drop_path_rate=0.1 / qkv_bias=ffn_bias=proj_bias=false / n_storage_tokens=4 / qk_norm=true / register_rope_enabled=true / register_rope_theta=1.0`。
 其它训练/优化/评估超参与官方 vitl 预设保持一致（`sqrt_wrt_1024` 自动按总 batch 缩放 lr）。
+
+**关于 `register_rope_theta=1.0` 的推导**：论文 Table 3 要求 register 的 RoPE 频率**显著高于** patch token 的频率。查 [rope_position_encoding.py:112](dinov3/layers/rope_position_encoding.py#L112)：`periods = base ** (2·i/D)`，即 `base` 越大频率越低。DINOv3 patch 默认 `base=100`，若把 register 也设 100 → "same freq." 情形（论文 Table 3 sub-optimal：Base 84.00 / Large 84.59）。`models_v2.py` 中 `reg_theta=100` 是相对于 timm 默认 `theta=10000` 的 **1/100**，映射到 DINOv3 的 patch base=100 → register base = **1.0**，对应论文 "high freq." 情形（Base 84.16 / Large 84.86）。此数值仍建议在你的数据/规模上做 ablation 复核。
+
+**关于变体选择**：论文 Table 2 / Table 9 列出的 ViT-5 **default setup** 是 **LayerScale + GeLU MLP**（对应 `vit5_base_mlp_im1k.yaml` / `models_v2.py::vit5_base`），而非 SwiGLU 变体。SwiGLU 版（`vit5_base_im1k.yaml`）是论文探讨的并列选项，与 LayerScale 共用时存在 over-gating 风险。若你要严格复现论文报告的 84.2% ImageNet 数字，优先用 `vit5_base_mlp_im1k.yaml`。
 
 ## 使用方式
 
@@ -107,7 +111,7 @@ student.pos_embed_type=rope
 | 无 layer_scale | `student.layerscale=null`（原生） |
 | 4 register tokens | `student.n_storage_tokens=4`（原生，token 顺序 `[cls, storage, patch]`） |
 | **qk_norm (RMSNorm on q,k)** | **新增 `student.qk_norm=true`** |
-| **register tokens 独立 RoPE (θ=100)** | **新增 `student.register_rope_enabled=true` + `register_rope_theta=100`** |
+| **register tokens 独立高频 RoPE** | **新增 `student.register_rope_enabled=true` + `register_rope_theta=1.0`**（与 DINOv3 patch base=100 保持"high freq"比例，见预设说明） |
 
 ## 兼容性 / 不变性
 
