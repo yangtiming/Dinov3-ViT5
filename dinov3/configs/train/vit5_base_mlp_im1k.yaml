@@ -74,6 +74,7 @@ student:
   norm_layer: rmsnorm            # ViT-5: RMSNorm
   n_storage_tokens: 4            # ViT-5: 4 register tokens
   qk_norm: true                  # ViT-5: RMSNorm on q,k
+  use_ape: true                  # ViT-5: additive APE on patch tokens (paper 3.4)
   register_rope_enabled: true    # ViT-5: 2D RoPE on register tokens
   register_rope_theta: 10.0      # Empirical initial guess; see vit5_base_im1k.yaml for rationale & caveats
   mask_k_bias: false

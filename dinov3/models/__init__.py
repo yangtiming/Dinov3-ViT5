@@ -55,6 +55,7 @@ def build_model(args, only_teacher=False, img_size=224, device=None):
             qk_norm=args.qk_norm,
             register_rope_enabled=args.register_rope_enabled,
             register_rope_theta=args.register_rope_theta,
+            use_ape=args.use_ape,
             untie_cls_and_patch_norms=args.untie_cls_and_patch_norms,
             untie_global_and_local_cls_norm=args.untie_global_and_local_cls_norm,
             device=device,

@@ -81,6 +81,16 @@ register_rope_theta: 100.0        # ViT-5: separate RoPE base for register token
 
 **关于变体选择**：论文 Table 2 / Table 9 列出的 ViT-5 **default setup** 是 **LayerScale + GeLU MLP**（对应 `vit5_base_mlp_im1k.yaml` / `models_v2.py::vit5_base`），而非 SwiGLU 变体。SwiGLU 版（`vit5_base_im1k.yaml`）是论文探讨的并列选项，与 LayerScale 共用时存在 over-gating 风险。若你要严格复现论文报告的 84.2% ImageNet 数字，优先用 `vit5_base_mlp_im1k.yaml`。
 
+**RMSNorm eps = 1e-6（已对齐）**：`models_v2.py` 里 block RMSNorm 和 q/k RMSNorm 均用 `eps=1e-6`；DINOv3 `RMSNorm` 默认 `eps=1e-5`，不改会有数值偏差。修正：
+- `norm_layer_dict["rmsnorm"] = partial(RMSNorm, eps=1e-6)`（vision_transformer.py）。
+- `attention.py` 的 `q_norm/k_norm = RMSNorm(head_dim, eps=1e-6)`。
+
+**APE（additive absolute pos embed，新增开关 `student.use_ape`）**：ViT-5 在 RoPE 之外还对 patch tokens 额外加一份可学习 APE（论文 3.4，`models_v2.py` 的 `ape=True` 默认）。DINOv3 原版没有。新增：
+- `DinoVisionTransformer` 新增 `use_ape: bool = False`，启用时构建 `pos_embed = nn.Parameter((1, grid², embed_dim))`，`init_weights` 里 `std=0.02` 初始化。
+- `prepare_tokens_with_masks` 在 cat 之前对 patch tokens 执行 `x += pos_embed`。
+- 多尺度裁剪（global 224 / local 96 → 不同 patch grid）下用 `F.interpolate(..., mode="bicubic")` 将 `pos_embed` 插值到当前 (H,W)，避免 shape 不匹配。
+- 两个 ViT-5 预设均开启 `use_ape: true`；`ssl_default_config.yaml` 默认 false，保持原 DINOv3 行为不受影响。
+
 ## 使用方式
 
 ### 推荐：用预设 yaml（最简洁）

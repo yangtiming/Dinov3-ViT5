@@ -67,8 +67,8 @@ class SelfAttention(nn.Module):
 
         self.qk_norm = qk_norm
         if qk_norm:
-            self.q_norm = RMSNorm(head_dim)
-            self.k_norm = RMSNorm(head_dim)
+            self.q_norm = RMSNorm(head_dim, eps=1e-6)  # ViT-5 convention
+            self.k_norm = RMSNorm(head_dim, eps=1e-6)
 
     def apply_rope(self, q: Tensor, k: Tensor, rope: Tensor | Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tensor]:
         # All operations will use the dtype of rope, the output is cast back to the dtype of q and k

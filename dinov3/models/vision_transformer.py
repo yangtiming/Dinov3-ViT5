@@ -27,7 +27,7 @@ ffn_layer_dict = {
 norm_layer_dict = {
     "layernorm": partial(nn.LayerNorm, eps=1e-6),
     "layernormbf16": partial(nn.LayerNorm, eps=1e-5),
-    "rmsnorm": RMSNorm,
+    "rmsnorm": partial(RMSNorm, eps=1e-6),  # ViT-5 convention (matches models_v2.py)
 }
 
 dtype_dict = {
@@ -87,6 +87,7 @@ class DinoVisionTransformer(nn.Module):
         qk_norm: bool = False,
         register_rope_enabled: bool = False,
         register_rope_theta: float = 100.0,
+        use_ape: bool = False,
         untie_cls_and_patch_norms: bool = False,
         untie_global_and_local_cls_norm: bool = False,
         device: Any | None = None,
@@ -113,6 +114,17 @@ class DinoVisionTransformer(nn.Module):
         )
 
         self.cls_token = nn.Parameter(torch.empty(1, 1, embed_dim, device=device))
+        # ViT-5 uses additive APE on patch tokens alongside RoPE (paper 3.4).
+        # Enabled via `use_ape`; disabled by default to preserve DINOv3 original behavior.
+        self.use_ape = use_ape
+        if use_ape:
+            self._ape_grid = img_size // patch_size
+            self.pos_embed = nn.Parameter(
+                torch.empty(1, self._ape_grid * self._ape_grid, embed_dim, device=device)
+            )
+        else:
+            self._ape_grid = None
+            self.pos_embed = None
         self.n_storage_tokens = n_storage_tokens
         if self.n_storage_tokens > 0:
             self.storage_tokens = nn.Parameter(torch.empty(1, n_storage_tokens, embed_dim, device=device))
@@ -227,8 +239,20 @@ class DinoVisionTransformer(nn.Module):
         nn.init.normal_(self.cls_token, std=0.02)
         if self.n_storage_tokens > 0:
             nn.init.normal_(self.storage_tokens, std=0.02)
+        if self.pos_embed is not None:
+            nn.init.normal_(self.pos_embed, std=0.02)
         nn.init.zeros_(self.mask_token)
         named_apply(init_weights_vit, self)
+
+    def _get_ape(self, H: int, W: int, dtype: torch.dtype) -> Tensor:
+        # Interpolate learnable pos_embed to requested (H, W) so multi-crop training
+        # with different patch-grid sizes still works (ViT-5 uses fixed size only).
+        if H == self._ape_grid and W == self._ape_grid:
+            return self.pos_embed.to(dtype)
+        pe = self.pos_embed.reshape(1, self._ape_grid, self._ape_grid, -1).permute(0, 3, 1, 2)
+        pe = torch.nn.functional.interpolate(pe.float(), size=(H, W), mode="bicubic", align_corners=False)
+        pe = pe.permute(0, 2, 3, 1).reshape(1, H * W, -1)
+        return pe.to(dtype)
 
     def prepare_tokens_with_masks(self, x: Tensor, masks=None) -> Tuple[Tensor, Tuple[int]]:
         x = self.patch_embed(x)
@@ -240,6 +264,10 @@ class DinoVisionTransformer(nn.Module):
             cls_token = self.cls_token
         else:
             cls_token = self.cls_token + 0 * self.mask_token
+        if self.pos_embed is not None:
+            # APE added only to patch tokens (ViT-5 style). Interpolate to current grid
+            # so multi-crop training (globals 224, locals 96) both work.
+            x = x + self._get_ape(H, W, x.dtype)
         if self.n_storage_tokens > 0:
             storage_tokens = self.storage_tokens
         else:
